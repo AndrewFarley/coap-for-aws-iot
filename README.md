@@ -1,25 +1,28 @@
-## CoAP for AWS IoT
+# CoAP for AWS IoT
 From: [github.com/AndrewFarley/coap-for-aws-iot](https://github.com/AndrewFarley/coap-for-aws-iot)
 
 _As of July 5, 2018 this is a work in progress.  Feel free to follow along if you're interested._
 
-### Problem
+## Problem
 
 Amazon doesn't support CoAP which is ideal for extremely low power and low bandwidth.
 
-### Solution
+## Solution
 AWS IoT offers some great features, a rule engine, super high scalability and availability, so we'll build a simple-to-deploy set of micro service(s) which can funnel CoAP data into AWS IoT via the following technologies.
 
-### Purpose
-Personal and professional interest in AWS, IoT and CoAP, plans to eventually convert this to a platform for client(s)
+## Author
+[Farley Farley Farley](farley@neonsurge.com) - farley@neonsurge.com
 
-### Footnotes / Problems / Fore-Thoughts
+## Purpose
+Personal and professional interest in AWS, IoT and CoAP, plans to build this into a platform
+
+## Footnotes / Problems / Fore-Thoughts
  * AWS Load Balancers do NOT do UDP, so load balancing this via traditional means on AWS is not possible.
  * I researched using AWS EKS / Fargate or such technologies, since they mostly rely on the AWS Load Balancers, I had to stay away from them unfortunately.  I could use Fargate without a Load Balancer, but I would not actually get a traditional static IP that I could guarantee wouldn't change.
  * For the absolute lowest-power utilization of a IoT device, I'd recommend not using DNS, instead just hardcoding IP addresses into their firmware.  Since we can get Static IPs from AWS, this is fairly simple, and this is the concept leverage in this example.
  * The current idea/concept/implementation isn't built for the "full" CoAP spec including Observing or two-way communication at the moment.  This will be for data ingestion via CoAP alone.  This concept could be expanded to include those patterns if desired, but would require expanding the reach and capabilities of the ingestion server, which I would like to avoid for now.
 
-### Data & Technology Flow & Notes
+## Data & Technology Flow & Notes
 1. Terraform code in this repo will spin up a SQS Queue, an Instance Role to push to this queue, and a CoAP Ingestor on a EC2 Instance.
     * This will be a dead-simple CoAP data ingestion platform, written in NodeJS and Docker.  Feel free to check it out [here](https://hub.docker.com/r/andrewfarley/coap-for-aws-iot/) or [here](https://github.com/AndrewFarley/coap-for-aws-iot).
     * This ingestor will do NO data validation in any way, it literally will stream input CoAP data directly into the SQS queue.  This does support the CoAP .well-known/core feature set at its basics but it will not advertise any valid endpoints, as it technically has none and infinite all at once in the way it is designed.
@@ -30,7 +33,14 @@ Personal and professional interest in AWS, IoT and CoAP, plans to eventually con
     * Then, look if there is an IoT Device with that Unique ID, if not, create it
     * The finally, any properties from the data packet part will be pushed as metrics into the device.
 
-### TODO / Security / High Availability / Performance
+## SCREENSHOTS / EXAMPLES / TUTORIAL HERE 
+* TODO
+* TODO
+* TODO
+
+## TODO / Security / High Availability / Performance
+* Clean up the codebase, it's a mess... once things are working though
+* Add diagrams, documentation, a walkthrough once things are finalized and flowing
 * Limit the Terraform IAM Role for SQS to _only_ our SQS queue
 * Implement a DLQ for the SQS queue incase things don't get processed
 * Add CloudWatch alarms to alert us if messages are stuck in the queue
