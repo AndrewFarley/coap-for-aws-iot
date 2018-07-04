@@ -1,0 +1,15 @@
+{
+  "name": "coap-for-aws-iot",
+  "version": "1.0.0",
+  "description": "CoAP Support for AWS IoT",
+  "author": "Andrew Farley <farley@neonsurge.com>",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "coap": "^0.22.0",
+    "sqs": "^2.0.2"
+  }
+}
+
