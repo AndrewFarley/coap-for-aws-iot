@@ -14,7 +14,7 @@ AWS IoT offers some great features, a rule engine, super high scalability and av
 [Farley Farley Farley](farley@neonsurge.com) - farley@neonsurge.com
 
 ## Purpose
-Personal and professional interest in AWS, IoT and CoAP, plans to build this into a platform
+Personal and professional interest in AWS, IoT and CoAP
 
 ## Footnotes / Problems / Fore-Thoughts
  * AWS Load Balancers do NOT do UDP, so load balancing this via traditional means on AWS is not possible.
@@ -40,6 +40,7 @@ Personal and professional interest in AWS, IoT and CoAP, plans to build this int
 
 ## TODO / Security / High Availability / Performance
 * Clean up the codebase, it's a mess... once things are working though
+* Need to come up with a effective way to monitor that the server is functioning.  Perhaps a CloudWatch Event lambda which uses CoAP and tries to push stuff into SQS (eg, a /health-check CoAP endpoint), which can trigger a cloudwatch alarm if it fails
 * Add diagrams, documentation, a walkthrough once things are finalized and flowing
 * Limit the Terraform IAM Role for SQS to _only_ our SQS queue
 * Modify the Ingestor to use the IAM Instance Role instead of passing credentials via user data.  The lame library [sqs](https://www.npmjs.com/package/sqs) only supports credentials.
@@ -50,3 +51,33 @@ Personal and professional interest in AWS, IoT and CoAP, plans to build this int
 * With more than one IP address, I recommend IoT device firmwares are programmed to round-robin between available IP addresses.  This will automatically provide some degree of high-availability and eventual delivery.
 * For eventual consistency/delivery, I recommend clients "wait" for the UDP response for at least a second.  If they do not hear the "ACK" heartbeat back, on their following check in they should exponentially wait longer (up to a maximum) to ensure that data eventually gets to the backend.  Once a successful ACK is received, can reset back to 1 second.  This will help ensure the minimal battery usage.  An alternate model would be based on time since ACK received and a hard limit.  So, if a device is programmed to  check in once every hour, but it has a hard limit of 4 hours between verified checkins, then if it hasn't received ACKs in the first three hours, when it's over the hard limit it will leave the network connection open for a long period of time (eg: 10 seconds) to wait for the ACK.  If none is received, then on future requests will continue to leave the connection open this long for an ACK until it has proof the data is upstream, then it can reset back down to 1 second.
 * In a future version, to support the two-way communication and Observer pattern that CoAP supports, and that AWS IoT via MQTT inherently support, the ingestor might be a "middleman" between AWS IoT and CoAP, either directly, or possibly through AWS Lambda to allow for advanced routing, rules, security, etc.
+
+## What is CoAP?
+
+In the IoT world, CoAP is the lightest-weight network protocol available for embedded devices to use to communicate with.  It allows you to not have to create full network stacks on embedded devices, throwing out things like TCP handshakes, DNS, SSL negotiation, etc.  For embedded devices or IoT where size, space, and battery consumption are mission critical, this is the protocol to use.  It supports a "fire and forget" mode of transport called NON that is only possible because this protocol leverages UDP instead of TCP.  TCP handshaking is often one of the most expensive activities for both a client and a server, second only to SSL.  To make it more user-friendly and accessible to developers, CoAP adopts a REST-like model that makes it more accessible to integrators and offers an "index" or restful definition file [.well-known/core](https://tools.ietf.org/html/draft-ietf-core-resource-directory-01) to allow clients or integrators to easily navigate and leverage the services of a CoAP server.  Because of the lower overhead, initial tests leveraging the code/example in this codebase performed on the smallest Amazon instance possible (t2.nano) with 0.5G of RAM and measly amount of CPU was able to perform upwards of 240 requests per second from a single remote host with a 99.7% success delivery ratio over a period of 10 minutes.
+
+For more: 
+* [CoAP and MQTT](http://www.eclipse.org/community/eclipse_newsletter/2014/february/article2.php)
+* [Coap.technology](http://coap.technology/)
+* [.well-known/core IETF RFC](https://tools.ietf.org/html/draft-ietf-core-resource-directory-01) 
+
+## Why Amazon IoT?
+
+Amazon's IoT platform is built for massive scale, but not costing you massive amounts for this scale.  It has a typical pay-as-you-go model which is very affordable in the IoT world.  It checks all the major boxes regarding features you would desire for an IoT platform.  Things such as...
+
+* Rules Engine - Triggering alarms, alerts, or executing code when threshholds are crossed
+* Device Registry / Shadow - Current state of any device, along with its sensors, properties, state, etc.
+* Data Ingestion Gateway - Currently only MQTT or REST based endpoints for ingesting data
+* A _very_ usable portal on AWS Console to begin looking at your device data immediately, including complex search features to find a specific device in a sea of devices.
+* Device Categorization, Grouping, Type - Allowing you granular organization of your devices based on your own categorization requirements.
+* A "big-data" style analytics platform, with a SQL-like syntax to query and retrieve data from.
+* Running time-series analysis, outlier detection, and other machine learning type algorithms against your data.
+
+For more: 
+* [IoT Core Features](https://aws.amazon.com/iot-core/features/)
+* [IoT Analytics Features](https://aws.amazon.com/iot-analytics/features/)
+* [IoT Device Features](https://aws.amazon.com/iot-device-management/features/)
+
+## Why AWS IoT + CoAP?
+
+This concept and implementation doesn't currently exist, although at the core of it it should be fairly simple especially if it is data ingestion only.  CoAP on AWS IoT opens up AWS IoT to a much wider range of consumers and up-and-comers in the world of IoT.
