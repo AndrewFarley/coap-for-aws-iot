@@ -5,10 +5,10 @@ _As of July 5, 2018 this is a work in progress.  Feel free to follow along if yo
 
 ## Problem
 
-Amazon doesn't support [CoAP](https://en.wikipedia.org/wiki/Constrained_Application_Protocol) which is ideal for extremely low power and low bandwidth.  See more info [here](http://coap.technology/).
+Amazon doesn't support [CoAP](#what-is-coap) which is ideal for extremely low power and low bandwidth.
 
 ## Solution
-AWS IoT offers some great features, a rule engine, super high scalability and availability, so we'll build a simple-to-deploy set of micro service(s) which can funnel CoAP data into AWS IoT via the following technologies.
+[AWS IoT](#why-amazon-iot) offers some great features, a rule engine, super high scalability and availability, so we'll build a simple-to-deploy set of micro service(s) which can funnel CoAP data into AWS IoT via the following technologies.
 
 ## Author
 [Farley Farley Farley](farley@neonsurge.com) - farley@neonsurge.com
@@ -16,13 +16,12 @@ AWS IoT offers some great features, a rule engine, super high scalability and av
 ## Purpose
 Personal and professional interest in AWS, IoT and CoAP
 
-## Footnotes / Problems / Fore-Thoughts
- * AWS Load Balancers do NOT do UDP, so load balancing this via traditional means on AWS is not possible.
- * I researched using AWS EKS / Fargate or such technologies, since they mostly rely on the AWS Load Balancers, I had to stay away from them unfortunately.  I could use Fargate without a Load Balancer, but I would not actually get a traditional static IP that I could guarantee wouldn't change.
- * For the absolute lowest-power utilization of a IoT device, I'd recommend not using DNS, instead just hardcoding IP addresses into their firmware.  Since we can get Static IPs from AWS, this is fairly simple, and this is the concept leverage in this example.
- * The current idea/concept/implementation isn't built for the "full" CoAP spec including Observing or two-way communication at the moment.  This will be for data ingestion via CoAP alone.  This concept could be expanded to include those patterns if desired, but would require expanding the reach and capabilities of the ingestion server, which I would like to avoid for now.
+## Data & Technology Flow (Overview)
+1. Data will ingest via CoAP into an EC2 Instance with a Static IP address.
+1. A simple, one-page NodeJS based script via Docker is run as a CoAP listener that spits the CoAP data into an SQS queue
+1. A Lambda reads from that SQS queue and creates/updates devices in AWS IoT
 
-## Data & Technology Flow & Notes
+## Technology / Code Explained
 1. Terraform code in this repo will spin up a SQS Queue, an Instance Role to push to this queue, and a CoAP Ingestor on a EC2 Instance.
     * This will be a dead-simple CoAP data ingestion platform, written in NodeJS and Docker.  Feel free to check it out [here](https://hub.docker.com/r/andrewfarley/coap-for-aws-iot/) or [here](https://github.com/AndrewFarley/coap-for-aws-iot).
     * This ingestor will do NO data validation in any way, it literally will stream input CoAP data directly into the SQS queue.  This does support the CoAP .well-known/core feature set at its basics but it will not advertise any valid endpoints, as it technically has none and infinite all at once in the way it is designed.
@@ -46,10 +45,10 @@ Personal and professional interest in AWS, IoT and CoAP
 * Modify the Ingestor to use the IAM Instance Role instead of passing credentials via user data.  The lame library [sqs](https://www.npmjs.com/package/sqs) only supports credentials.
 * Implement a DLQ for the SQS queue incase things don't get processed
 * Add CloudWatch alarms to alert us if messages are stuck in the queue
-* By design, this is not inherently secure.  Anyone snooping on the wire could see this packet if they caught it in a packet trace and replicate it and poison the system with bad data.  You could very easily add a custom CRC into the data packet or onto the end of the URL that would CRC your algorithm against the data packet.  I would still NOT do this parsing in the data ingestion, I would let the data stream in as fast as humanly possible and validate/parse it later.  However, if you want to be able to give users (devs...?) feedback if their requests have the right CRC or not, then this CRC would need to be implemented in the ingestor.  This should be relatively simple to add, I will probably do this eventually if/when I roll this platform out to a client.
-* For high availability, I recommend you deploy this stack with two instances instead of just one, with two static IP addresses.
-* With more than one IP address, I recommend IoT device firmwares are programmed to round-robin between available IP addresses.  This will automatically provide some degree of high-availability and eventual delivery.
-* For eventual consistency/delivery, I recommend clients "wait" for the UDP response for at least a second.  If they do not hear the "ACK" heartbeat back, on their following check in they should exponentially wait longer (up to a maximum) to ensure that data eventually gets to the backend.  Once a successful ACK is received, can reset back to 1 second.  This will help ensure the minimal battery usage.  An alternate model would be based on time since ACK received and a hard limit.  So, if a device is programmed to  check in once every hour, but it has a hard limit of 4 hours between verified checkins, then if it hasn't received ACKs in the first three hours, when it's over the hard limit it will leave the network connection open for a long period of time (eg: 10 seconds) to wait for the ACK.  If none is received, then on future requests will continue to leave the connection open this long for an ACK until it has proof the data is upstream, then it can reset back down to 1 second.
+* By design, this is not inherently secure.  Anyone snooping on the wire could see this packet if they caught it in a packet trace and replicate it and poison the system with bad data.  You could very easily add a custom CRC into the data packet or onto the end of the URL that would CRC your algorithm against the data packet, or encrypt your entire data packet against a private key.  I would still NOT do the validation of this in the data ingestion, I would let the data stream in as fast as humanly possible and validate/parse it later.  However, if you want to be able to give users (devs...?) feedback if their requests have the right CRC/hash/encryption or not, then this decryption/validation would need to be implemented in the ingestor.  This should be relatively simple to add, I will probably do this eventually
+* For high availability, I recommend you deploy this stack with two instances instead of just one, with two static IP addresses, ideally in two different availability zones but into the same SQS queue.  For added redundancy, you may even consider these to be in two different AWS regions with two different SQS queues, having the secondary SQS queue have a different Lambda push into the primary queue as a "eventual-consistency" model of sorts, gaining insulation from a temporary catastrophic full region failure.
+* With more than one IP address, I recommend IoT device firmwares are programmed to round-robin between available IP addresses.  This will automatically provide a degree of high-availability and eventual consistency.
+* For eventual consistency/delivery, I recommend clients "wait" for the UDP response for at least a second, not doing a typical NON.  If they do not hear the "ACK" heartbeat back, on their following check in they should exponentially wait longer (up to a maximum) to ensure that data eventually gets to the backend.  Once a successful ACK is received, can reset back to 1 second.  This will help ensure the minimal battery usage.  An alternate model would be based on time since ACK received.  So, if a device is programmed to  check in once every hour, but it has a hard limit of 4 hours between verified checkins, then the first three hours it can use a NON request and immediately close the connection not waiting for a response, but after the hard limit is passed it will leave the network connection open for a bit to wait for the ACK.  If none is received, then on future requests can leave it open longer until it has proof the data is upstream, then it can go back to doing NONs until another hard limit is passed.
 * In a future version, to support the two-way communication and Observer pattern that CoAP supports, and that AWS IoT via MQTT inherently support, the ingestor might be a "middleman" between AWS IoT and CoAP, either directly, or possibly through AWS Lambda to allow for advanced routing, rules, security, etc.
 
 ## What is CoAP?
@@ -81,3 +80,9 @@ For more:
 ## Why AWS IoT + CoAP?
 
 This concept and implementation doesn't currently exist, although at the core of it it should be fairly simple especially if it is data ingestion only.  CoAP on AWS IoT opens up AWS IoT to a much wider range of consumers and up-and-comers in the world of IoT.
+
+## Footnotes / Problems / Fore-Thoughts
+ * AWS Load Balancers do NOT do UDP, so load balancing this via traditional means on AWS is not possible.
+ * I researched using AWS EKS / Fargate or such technologies, since they mostly rely on the AWS Load Balancers, I had to stay away from them unfortunately.  I could use Fargate without a Load Balancer, but I would not actually get a traditional static IP that I could guarantee wouldn't change.
+ * For the absolute lowest-power utilization of a IoT device, I'd recommend not using DNS, instead just hardcoding IP addresses into their firmware.  Since we can get Static IPs from AWS, this is fairly simple, and this is the concept leverage in this example.
+ * The current idea/concept/implementation isn't built for the "full" CoAP spec including Observing or two-way communication at the moment.  This will be for data ingestion via CoAP alone.  This concept could be expanded to include those patterns if desired, but would require expanding the reach and capabilities of the ingestion server, which I would like to avoid for now.
