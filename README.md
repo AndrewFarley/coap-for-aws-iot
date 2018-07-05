@@ -5,7 +5,7 @@ _As of July 5, 2018 this is a work in progress.  Feel free to follow along if yo
 
 ## Problem
 
-Amazon doesn't support CoAP which is ideal for extremely low power and low bandwidth.
+Amazon doesn't support [CoAP](https://en.wikipedia.org/wiki/Constrained_Application_Protocol) which is ideal for extremely low power and low bandwidth.  See more info [here](http://coap.technology/).
 
 ## Solution
 AWS IoT offers some great features, a rule engine, super high scalability and availability, so we'll build a simple-to-deploy set of micro service(s) which can funnel CoAP data into AWS IoT via the following technologies.
