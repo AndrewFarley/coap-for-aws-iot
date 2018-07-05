@@ -42,6 +42,7 @@ Personal and professional interest in AWS, IoT and CoAP, plans to build this int
 * Clean up the codebase, it's a mess... once things are working though
 * Add diagrams, documentation, a walkthrough once things are finalized and flowing
 * Limit the Terraform IAM Role for SQS to _only_ our SQS queue
+* Modify the Ingestor to use the IAM Instance Role instead of passing credentials via user data.  The lame library [sqs](https://www.npmjs.com/package/sqs) only supports credentials.
 * Implement a DLQ for the SQS queue incase things don't get processed
 * Add CloudWatch alarms to alert us if messages are stuck in the queue
 * By design, this is not inherently secure.  Anyone snooping on the wire could see this packet if they caught it in a packet trace and replicate it and poison the system with bad data.  You could very easily add a custom CRC into the data packet or onto the end of the URL that would CRC your algorithm against the data packet.  I would still NOT do this parsing in the data ingestion, I would let the data stream in as fast as humanly possible and validate/parse it later.  However, if you want to be able to give users (devs...?) feedback if their requests have the right CRC or not, then this CRC would need to be implemented in the ingestor.  This should be relatively simple to add, I will probably do this eventually if/when I roll this platform out to a client.

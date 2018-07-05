@@ -10,8 +10,8 @@ function getRandomInt(min, max) {
 }
 
 var payload = {
-   "metric_1": getRandomInt(10000000,99999999),
-   "metric_2": getRandomInt(10000000,99999999)
+   "metric1": getRandomInt(5,25),
+   "metric2": getRandomInt(5,25)
 }
 
 req.write(JSON.stringify(payload));

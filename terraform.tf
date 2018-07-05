@@ -50,10 +50,10 @@ data "aws_ami" "ubuntu" {
 
 resource "aws_sqs_queue" "terraform_queue" {
   name                      = "${local.stack_name}"
-  delay_seconds             = 5
+  delay_seconds             = 0
   max_message_size          = 2048
   message_retention_seconds = 1209600  # 86400 = 1 day, 1209600 = 14 days (max)
-  receive_wait_time_seconds = 10
+  receive_wait_time_seconds = 0
   # redrive_policy            = "{\"deadLetterTargetArn\":\"${aws_sqs_queue.terraform_queue_deadletter.arn}\",\"maxReceiveCount\":4}"
   # tags {
   #   Environment = "production"
@@ -120,6 +120,10 @@ output "access_key_id" {
 output "access_key_secret" {
   value       = ["${aws_iam_access_key.demo.secret}"]
 }
+output "sqs_queue" {
+  value = "${aws_sqs_queue.terraform_queue.name}"
+}
+
 
 # Spins up a _simple as hell_ host
 resource "aws_instance" "demo" {
