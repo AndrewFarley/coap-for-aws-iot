@@ -96,56 +96,60 @@ def is_number(s):
 
 from urllib.parse import urlparse
 
-print("Listening for messages from SQS queue...")
-loops = 0
-maxloops = 10
-while True:
-    loops = loops + 1
-    if loops >= maxloops:
-        break
-    try:
-        messages = queue.receive_messages(WaitTimeSeconds=1, MaxNumberOfMessages=10, VisibilityTimeout=1)
-        if len(messages) == 0:
+def lambda_handler(event, context):
+    print("got event")
+    print(event)
+    print("Listening for messages from SQS queue...")
+    loops = 0
+    maxloops = 10
+    while True:
+        loops = loops + 1
+        if loops >= maxloops:
             break
-        for message in messages:
-            print("Message received: {0}".format(message.body))
-            try:
-                contents = json.loads(message.body)
-                o = urlparse(contents['path'])
-                path_parts = list(filter(None, o.path.split('/')))
-                print(path_parts)
-                
-                # Validate format...
-                if len(path_parts) != 2:
-                    print("Wrong format, move to DLQ queue?")
-                    continue
-                
-                # TODO: Check validity ?  Custom CRC/Hash?
-                
-                # Parse our JSON Payload to pull out metrics
-                payload = json.loads(contents['payload'])
+        try:
+            messages = queue.receive_messages(WaitTimeSeconds=1, MaxNumberOfMessages=10, VisibilityTimeout=1)
+            if len(messages) == 0:
+                break
+            for message in messages:
+                print("Message received: {0}".format(message.body))
+                try:
+                    contents = json.loads(message.body)
+                    o = urlparse(contents['path'])
+                    path_parts = list(filter(None, o.path.split('/')))
+                    print(path_parts)
+                    
+                    # Validate format...
+                    if len(path_parts) != 2:
+                        print("Wrong format, move to DLQ queue?  For now delete")
+                        message.delete()
+                        continue
+                    
+                    # TODO: Check validity ?  Custom CRC/Hash?
+                    
+                    # Parse our JSON Payload to pull out metrics
+                    payload = json.loads(contents['payload'])
 
-                # Create and/or update our thing
-                updateThing(path_parts[0], path_parts[1], {'state': {
-                    "reported" : merge_dicts(payload, {"online": "true", "uuid": path_parts[1], "type": path_parts[0]})
-                }})
-                
-                # Immediately delete incase something fails below...
-                message.delete()
-            except Exception as e:
-                print("Caught exception")
-                exc_info = sys.exc_info()
-                traceback.print_exception(*exc_info)
+                    # Create and/or update our thing
+                    updateThing(path_parts[0], path_parts[1], {'state': {
+                        "reported" : merge_dicts(payload, {"online": "true", "uuid": path_parts[1], "type": path_parts[0]})
+                    }})
+                    
+                    # Immediately delete incase something fails below...
+                    message.delete()
+                except Exception as e:
+                    print("Caught exception")
+                    exc_info = sys.exc_info()
+                    traceback.print_exception(*exc_info)
 
-                # TODO: Move message to DLQ for manual in inspection...?
-                message.delete()
+                    # TODO: Move message to DLQ for manual in inspection...?
+                    message.delete()
 
-            # Now slack our results
-            # pprint(contents)
-            # helpers.slackDoorActions("<@{}|{}>".format(contents['user_id'],contents['user_name']),state, "via Slack")
-    except Exception as e:
-        print("Got exception: {}".format(e))
-        pass
+                # Now slack our results
+                # pprint(contents)
+                # helpers.slackDoorActions("<@{}|{}>".format(contents['user_id'],contents['user_name']),state, "via Slack")
+        except Exception as e:
+            print("Got exception: {}".format(e))
+            pass
 
 
 # response = iotdata.get_thing_shadow(
@@ -155,3 +159,8 @@ while True:
 # streamingBody = response["payload"]
 # jsonState = json.loads(streamingBody.read())
 # pprint(jsonState)
+
+if __name__ == "__main__":
+    data = lambda_handler({}, "test")
+    # data['body'] = json.loads(data['body'])
+    # print( json.dumps(data, sort_keys=True, indent=4, separators=(',', ': ')) )

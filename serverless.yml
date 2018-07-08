@@ -1,0 +1,281 @@
+# Name of our service
+service: sqs-to-iot
+
+# The required version of serverless we have to be using for this to work
+frameworkVersion: ">=1.26.0 <2.0.0"
+
+
+##############################
+# Custom variable definitons
+##############################
+custom:
+  # awsAccountId: 594560747451
+  awsAccountId: ${file(./dynamic_variables.js):aws_account_id}  # This can used in CloudFormation or ARNs so it's not hardcoded
+  cors: true              # Whether or not we want CORS
+  pythonRequirements: ${file(./dynamic_variables.js):get_python_reqs_config}
+
+  # This is for our OpenAPI Documentation (via serverless-aws-documentation)
+  documentation:
+    api:
+      info:
+        version: '2'
+        title: IoT API
+        description: IoT API
+        termsOfService: https://website.com
+        contact:
+          name: Farley
+          url: https://website.com
+          email: some-fake@email.com
+        license:
+          name: The license
+          url: https://www.website.com
+      tags:
+        -
+          name: All
+          description: All
+    
+    definitions:
+      
+      misc_object:
+        type: object
+        properties:
+          key:
+            type: string
+            description: "Miscellaneous not pre-defined array full of various keys and values"
+          key_two:
+            type: string
+            description: "Miscellaneous not pre-defined array full of various keys and values"
+
+      iot:
+        type: object
+        properties:
+          created_at:
+            type: string
+            format: date-time
+            description: "Read-only property"
+          id:
+            type: integer
+            description: "Read-only property"
+          uuid:
+            type: string
+            description: "unique ID"
+          type:
+            type: string
+          updated_at:
+            type: string
+            format: date-time
+            description: "Read-only property"
+          extended_data: "${self:custom.documentation.definitions.misc_object}"
+        required:
+          - uuid
+
+    # Now we describe all the models that we use
+    models:
+      - 
+        name: ArrayOfMiscData
+        contentType: "application/json"
+        schema: "${self:custom.documentation.definitions.misc_object}"
+      -
+        name: ArrayOfIoTObjects
+        contentType: "application/json"
+        schema:
+          type: array
+          items: "${self:custom.documentation.definitions.iot}"
+      -
+        name: IoTObject
+        contentType: "application/json"
+        schema: "${self:custom.documentation.definitions.iot}"
+
+
+# This provides the python auto-requirement/include helper
+plugins:
+  - serverless-python-requirements    # This automatically includes python requirements from requirements.txt
+  - serverless-pseudo-parameters      # This allows us to specify AWS CloudFormation Pseudo Parameters in our CF below ( see: https://www.npmjs.com/package/serverless-pseudo-parameters )
+  # - serverless-aws-documentation      # This generates documentation for helping others use our API (swagger)
+
+##############################
+# Our service provider and runtime/region definitions
+##############################
+provider:
+  name: aws                       # Which provider to use
+  description: "sqs-to-iot"
+  stage: ${opt:stage, 'dev'}      # Which stage to deploy to
+  runtime: python3.6              # Which Lambda runtime to use
+  logRetentionInDays: 30
+  # ${file(config/config_${self:provider.stage}.yml):logRetentionInDays, 30} # How many days we want to maintain logs in CloudWatch
+  region: ${file(config/config_local.yml):region, 'eu-west-1'}   # Which AWS region to deploy in, eu-west-1 by default, but overridable
+  memorySize: 256                 # In megabytes, 128 minimum in 64MB increments
+  timeout: 60                     # In seconds
+  versionFunctions:  true         # We want to version our functions so we can revert if we need to
+  cfLogs: true                    # This allows us to customize our expiration time of our CloudWatch Log Buckets
+  # environment: ${file(config/config_${self:provider.stage}.yml):environment_vars} # Environment variables to pass into functions
+  iamRoleStatements:
+
+  # We want to be able to create log groups and put log events...
+  - Effect: Allow                 # We want to push custom cloudwatch metrics for keeping track of specific data points
+    Action:
+      - cloudwatch:PutMetricData
+      - lambda:InvokeFunction
+    Resource: "*"
+
+  # Allow IoT
+  - Effect: Allow                 # We want to push custom cloudwatch metrics for keeping track of specific data points
+    Action:
+      - iot:*
+    Resource: "*"
+
+  # This allows us to "put" stuff into the s3 bucket
+  # - Effect: Allow
+  #   Action:
+  #     - s3:PutObject*
+  #     - s3:GetObject*
+  #     - s3:CopyObject*
+  #   Resource: "arn:aws:s3:::${file(config/config_${self:provider.stage}.yml):s3_bucket.name}/*"
+
+  # This allows us to "do" stuff to SQS
+  - Effect: Allow
+    Action:
+      - sqs:ListQueues
+    Resource: "arn:aws:sqs:region:594560747451:*"
+  - Effect: Allow
+    Action:
+      - sqs:ReceiveMessage
+      - sqs:DeleteMessage
+      - sns:Publish
+    Resource: "arn:aws:sqs:eu-west-1:594560747451:coap-dev"
+
+
+
+##############################
+# Our endpoint definition(s)
+##############################
+functions:
+
+  api:
+    description: All API calls routed through a single handler 
+    handler: handler.lambda_handler
+    # vpc: ${file(config/config_${self:provider.stage}.yml):vpc}
+    environment:
+      API_NAME: "api"
+
+    events:
+      - schedule:
+          description: This runs every minute
+          rate: rate(1 minute)
+          enabled: true
+
+      # - schedule:
+      #     description: This runs every 14 minutes to keep this API warm
+      #     rate: rate(14 minutes)
+      #     enabled: true
+      #     input:
+      #       schedule: pre-warm
+      # - http:
+      #     path: unsubscribe          # The /path at which this endpoint exists
+      #     method: get                # This helps support listing (with GET) and new object creation (with POST)
+      #     cors: True
+      #     documentation:
+      #       summary: Unsubscribes an email address from receiving emails from Shake-On
+      #       tags:
+      #         - Person
+      #         - Company
+      #       pathParams:
+      #         -
+      #           name: "email"
+      #           description: "email address of the person we wish to unsubscribe"
+      #           required: true
+      #       description: >
+      #         Unsubscribes an email address from receiving emails from Shake-On
+      #       methodResponses:
+      #         -
+      #           statusCode: '200'
+      #           responseModels:
+      #             "text/html": HTMLObject
+
+      # - sqs: 
+      #     arn: "arn:aws:sqs:${self:provider.region}::${self:custom.awsAccountId}:coap-dev"
+      #     batchSize: 10
+
+
+      # - http:
+      #     path: event/{id}/attendees   # The /path at which this endpoint exists
+      #     authorizer: ${self:custom.authorizer}
+      #     method: get                # This helps support listing (with GET) and new object creation (with POST)
+      #     cors: True
+      #     request:
+      #       parameters:
+      #         paths:
+      #           id: true
+      #     documentation:
+      #       summary: Gets a list of attendees for this event (person + company)
+      #       tags:
+      #         - Event
+      #         - Person
+      #         - Company
+      #       requestHeaders:
+      #         -
+      #           name: "Authorization"
+      #           description: "This is the Session ID returned from any of the login/assume commands"
+      #           required: true
+      #       description: >
+      #         This gets a paged list of attendees (company and person) for an event 
+      #       pathParams:
+      #         -
+      #           name: "id"
+      #           description: "id of the event which you want to get attendees for"
+      #           required: true
+      #       queryParams:
+      #         -
+      #           name: type
+      #           description: The type of entity we want to find, either "person" or "company".  Leave blank for both
+      #           required: false
+      #         -
+      #           name: search
+      #           description: The email or name we want to search for
+      #           required: false
+      #         -
+      #           name: attendance_state
+      #           description: The state of attendance to limit users to.  Leave blank or unset for all, or specify attended, noshow, or hasbracelet
+      #           required: false
+      #         -
+      #           name: page
+      #           description: The page we are requesting, default 0
+      #           required: false
+      #         -
+      #           name: page_size
+      #           description: How many results we want per page
+      #           required: false
+      #       methodResponses:
+      #         -
+      #           statusCode: '200'
+      #           responseModels:
+      #             "application/json": ArrayOfEntityObjects
+
+
+##############################
+# Exclude crap we don't need inside our deployed package, such as node modules
+# readmes, and such since our app is Python-based.  Basically just Python!
+##############################
+package:
+  include:
+    - "config/config_${self:provider.stage}.yml"
+    - "serverless.yml"
+  exclude:
+    - ".DS_Store"
+    - ".git"
+    - ".gitignore"
+    - ".requirements"
+    - ".serverless-python-requirements-static-cache"
+    - "node_modules/**"
+    - ".requirements/**"
+    - "**.md"
+    - "**tar.gz"
+    - "**.sh"
+    - "**.txt"
+    - "**/**.yml"
+    - "**.zip"
+    - "package.json"
+    - "package-lock.json"
+    - "docs/**"
+    - "tests/**"
+    - "**.sql"
